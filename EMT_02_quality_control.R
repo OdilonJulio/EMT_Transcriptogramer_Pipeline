@@ -21,20 +21,34 @@ if (!"percent.mt" %in% colnames(combined_preQC@meta.data)) {
   combined_preQC[["percent.mt"]] <- PercentageFeatureSet(combined_preQC, pattern = "^MT-")
 }
 
-# Gerar violin plots combinados
-p_pre <- VlnPlot(
+# --- 1. Plots pré-QC com todas as amostras no mesmo gráfico ---
+# Gerar violin plots como uma lista separada
+plot_list_pre <- VlnPlot(
   combined_preQC,
   features = c("nFeature_RNA", "nCount_RNA", "percent.mt"),
   group.by = "sample",
-  pt.size = 0.1,
-  ncol = 3
-) + theme_classic(base_size = 14) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-# Adicionar título fora do objeto com patchwork
-p_pre <- p_pre + patchwork::plot_annotation(
-  title = "Pre-QC Distributions - All Samples"
+  pt.size = 0, # Remove pontos originais grandes
+  combine = FALSE
 )
+
+# Adicionar pontos pretos (poeira) e manter títulos
+plot_list_pre <- lapply(plot_list_pre, function(x) {
+  x + 
+    geom_jitter(height = 0, width = 0.2, size = 0.1, alpha = 0.1, color = "black") + # PONTOS PRETOS
+    theme_classic(base_size = 14) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.title = element_text(hjust = 0.5, face = "bold") # Mantém e centraliza o título (nFeature, etc)
+    )
+})
+
+# Juntar tudo, coletando a legenda para ficar única na direita
+p_pre <- patchwork::wrap_plots(plot_list_pre, ncol = 3) + 
+  patchwork::plot_layout(guides = "collect") + # UNIFICA A LEGENDA COLORIDA
+  patchwork::plot_annotation(
+    title = "Pre-QC Distributions - All Samples",
+    theme = theme(plot.title = element_text(size = 18, face = "bold", hjust = 0.5))
+  )
 
 # Salvar PDF de alta qualidade
 pdf("images/QC_pre_QC.pdf", width = 14, height = 6)
@@ -68,20 +82,34 @@ if (!"percent.mt" %in% colnames(combined_postQC@meta.data)) {
   combined_postQC[["percent.mt"]] <- PercentageFeatureSet(combined_postQC, pattern = "^MT-")
 }
 
-# Gerar violin plots combinados pós-QC
-p_post <- VlnPlot(
+# --- 4. Plots pós-QC para cada amostra ---
+# Gerar violin plots pós-QC como lista
+plot_list_post <- VlnPlot(
   combined_postQC,
   features = c("nFeature_RNA", "nCount_RNA", "percent.mt"),
   group.by = "sample",
-  pt.size = 0.1,
-  ncol = 3
-) + theme_classic(base_size = 14) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-# Adicionar título com patchwork
-p_post <- p_post + patchwork::plot_annotation(
-  title = "Post-QC Distributions - All Samples"
+  pt.size = 0, 
+  combine = FALSE
 )
+
+# Adicionar pontos pretos e manter títulos
+plot_list_post <- lapply(plot_list_post, function(x) {
+  x + 
+    geom_jitter(height = 0, width = 0.2, size = 0.1, alpha = 0.1, color = "black") + # PONTOS PRETOS
+    theme_classic(base_size = 14) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.title = element_text(hjust = 0.5, face = "bold") # Mantém e centraliza o título
+    )
+})
+
+# Juntar tudo, coletando a legenda
+p_post <- patchwork::wrap_plots(plot_list_post, ncol = 3) + 
+  patchwork::plot_layout(guides = "collect") + # UNIFICA A LEGENDA COLORIDA
+  patchwork::plot_annotation(
+    title = "Post-QC Distributions - All Samples",
+    theme = theme(plot.title = element_text(size = 18, face = "bold", hjust = 0.5))
+  )
 
 # Salvar PDF de alta qualidade
 

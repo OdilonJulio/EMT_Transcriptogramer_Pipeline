@@ -439,340 +439,153 @@ suavizar_dados_temporais <- function(temporal_df, window_size = 5) {
 # Aplicar suavização
 temporal_smoothed <- suavizar_dados_temporais(temporal_data, window_size = 7)
 
-# [CONTINUA... O RESTO DO SCRIPT PERMANECE IGUAL]
 
 ############################################
-### 5. GRÁFICO TEMPORAL PRINCIPAL #######
+### 5, 6, 7 & 8. PLOTS (ENGLISH & BIG FONTS) ###
 ############################################
 
-criar_grafico_temporal <- function(temporal_df, clusters_info) {
-  
-  # Preparar paleta de cores
+# --- CONFIGURAÇÃO DE TEMA GIGANTE (PARA SLIDES/ARTIGO) ---
+library(ggplot2)
+library(scales)
+library(RColorBrewer)
+
+theme_big_font <- theme_minimal(base_size = 24) + # Base dobrada (12 -> 24)
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 32),
+    plot.subtitle = element_text(hjust = 0.5, size = 20, color = "grey40"),
+    axis.title = element_text(face = "bold", size = 24),
+    axis.text = element_text(size = 20, color = "black"),
+    legend.title = element_text(face = "bold", size = 22),
+    legend.text = element_text(size = 18),
+    legend.position = "right",
+    panel.grid.major = element_line(color = "grey90", size = 0.5),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(color = "grey60", fill = NA, size = 1)
+  )
+
+# Funções auxiliares de cores (mantendo a lógica do seu script)
+get_cluster_colors <- function(n) {
+  cols <- brewer.pal(min(9, max(3, n)), "Set1")
+  if(n > length(cols)) cols <- colorRampPalette(cols)(n)
+  return(cols)
+}
+
+# ------------------------------------------------------------------------------
+# 5. MAIN TEMPORAL PLOT (PC1 vs IMPORTANCE)
+# ------------------------------------------------------------------------------
+criar_grafico_temporal <- function(temporal_df) {
   n_clusters <- length(unique(temporal_df$Cluster))
-  cluster_colors <- brewer.pal(min(9, max(3, n_clusters)), "Set1")
+  colors <- get_cluster_colors(n_clusters)
   
-  if (n_clusters > length(cluster_colors)) {
-    cluster_colors <- colorRampPalette(cluster_colors)(n_clusters)
-  }
-  
-  names(cluster_colors) <- sort(unique(temporal_df$Cluster))
-  
-  # Calcular estatísticas para anotações
+  # Peak annotations
   cluster_stats <- temporal_df %>%
     group_by(Cluster) %>%
     summarise(
-      peak_importance = max(Importance_smooth, na.rm = TRUE),
+      peak_imp = max(Importance_smooth, na.rm=TRUE),
       peak_time = PC1_value[which.max(Importance_smooth)],
-      mean_importance = mean(Importance_smooth, na.rm = TRUE),
-      .groups = "drop"
+      .groups = 'drop'
     )
   
-  # Gráfico principal
   p <- ggplot(temporal_df, aes(x = PC1_value, y = Importance_smooth, color = Cluster)) +
-    geom_line(size = 1.2, alpha = 0.8) +
-    geom_point(data = cluster_stats, 
-               aes(x = peak_time, y = peak_importance, color = Cluster),
-               size = 3, shape = 18) +
-    scale_color_manual(values = cluster_colors) +
+    geom_line(size = 2, alpha = 0.85) + # Linha mais grossa
+    geom_point(data = cluster_stats, aes(x = peak_time, y = peak_imp), size = 5, shape = 18) +
+    scale_color_manual(values = colors) +
     labs(
-      title = "Evolução Temporal da Importância dos Clusters de Genes",
-      subtitle = paste("Baseado na reconstrução do transcriptograma ao longo do PC1",
-                       "\nPontos destacados indicam picos de importância máxima"),
-      x = "Valor do PC1 (Progressão Temporal)",
-      y = "Importância do Cluster (Soma dos Módulos dos Loadings)",
+      title = "Temporal Evolution of Gene Cluster Importance",
+      subtitle = "Cluster activity based on transcriptogram reconstruction along PC1",
+      x = "PC1 Value (Pseudotime)",
+      y = "Cluster Importance (Sum of Loadings)",
       color = "Cluster"
-    ) +
-    theme_minimal(base_size = 14) +
-    theme(
-      plot.title = element_text(face = "bold", hjust = 0.5, size = 16),
-      plot.subtitle = element_text(hjust = 0.5, size = 12),
-      legend.position = "right",
-      panel.grid.major = element_line(color = "grey90", size = 0.2),
-      panel.grid.minor = element_blank(),
-      axis.text = element_text(color = "black"),
-      plot.margin = margin(20, 20, 20, 20)
     ) +
     scale_x_continuous(labels = scales::scientific) +
-    scale_y_continuous(labels = scales::scientific)
+    theme_big_font
   
   return(p)
 }
 
-message("\n=== CRIAÇÃO DE GRÁFICOS ===")
-temporal_plot <- criar_grafico_temporal(temporal_smoothed, gene_clusters)
-
-# Salvar gráfico principal
+message("\n=== GENERATING MAIN TEMPORAL PLOT ===")
+temporal_plot <- criar_grafico_temporal(temporal_smoothed)
 ggsave(file.path(output_dir, "images", "evolucao_temporal_clusters.png"),
-       temporal_plot, width = 16, height = 9, dpi = 600)
-message("✅ Gráfico temporal salvo: evolucao_temporal_clusters.png")
-############################################
-### 6. GRÁFICOS ADICIONAIS - CORRIGIDO ###
-############################################
+       temporal_plot, width = 18, height = 10, dpi = 300)
 
-# Função para criar gráfico normalizado por frame - CORRIGIDA
-criar_grafico_normalizado <- function(df, 
-                                      value_col = "Importance_smooth", 
-                                      cluster_col = "Cluster", 
-                                      frame_col = "PC1_value") {
-  
-  # Verificar colunas disponíveis
-  available_cols <- colnames(df)
-  message("Colunas disponíveis no dataframe: ", paste(available_cols, collapse = ", "))
-  
-  # Verificar se as colunas necessárias existem
-  required_cols <- c(value_col, cluster_col, frame_col)
-  missing_cols <- setdiff(required_cols, available_cols)
-  
-  if (length(missing_cols) > 0) {
-    stop("O data.frame não contém as colunas esperadas: ", 
-         paste(missing_cols, collapse = ", "),
-         "\nColunas disponíveis: ", paste(available_cols, collapse = ", "))
-  }
-  
-  # Fazer uma cópia para não modificar o original
-  df_plot <- df %>%
+# ------------------------------------------------------------------------------
+# 6. NORMALIZED PLOT (Relative Importance %)
+# ------------------------------------------------------------------------------
+criar_grafico_normalizado <- function(df) {
+  # Normalize per frame (sum = 100%)
+  df_norm <- df %>%
+    group_by(PC1_value) %>%
     mutate(
-      Value = as.numeric(.data[[value_col]]),
-      Frame = as.numeric(.data[[frame_col]]),
-      Cluster = as.factor(.data[[cluster_col]])
-    ) %>%
-    filter(!is.na(Value), !is.na(Frame), !is.na(Cluster))
-  
-  if (nrow(df_plot) == 0) {
-    stop("Nenhum dado válido após filtragem para o gráfico normalizado.")
-  }
-  
-  message("Preparando dados para normalização: ", nrow(df_plot), " registros, ",
-          length(unique(df_plot$Cluster)), " clusters, ",
-          length(unique(df_plot$Frame)), " frames")
-  
-  # Normalizar valores por frame (percentual)
-  df_normalized <- df_plot %>%
-    group_by(Frame) %>%
-    mutate(
-      Total_Per_Frame = sum(Value, na.rm = TRUE),
-      Normalized = ifelse(Total_Per_Frame == 0, 0, 100 * Value / Total_Per_Frame)
+      Total = sum(Importance_smooth, na.rm=TRUE),
+      Normalized = ifelse(Total==0, 0, 100 * Importance_smooth / Total)
     ) %>%
     ungroup()
   
-  # Verificar se a normalização funcionou
-  normalization_summary <- df_normalized %>%
-    group_by(Frame) %>%
-    summarise(
-      Total_Normalized = sum(Normalized, na.rm = TRUE),
-      .groups = "drop"
-    )
+  n_clusters <- length(unique(df_norm$Cluster))
+  colors <- get_cluster_colors(n_clusters)
   
-  message("Verificação de normalização - Soma por frame deve ser ~100: ",
-          paste(round(unique(normalization_summary$Total_Normalized), 1), collapse = ", "))
-  
-  # Preparar paleta de cores consistente
-  n_clusters <- length(unique(df_normalized$Cluster))
-  cluster_colors <- brewer.pal(min(9, max(3, n_clusters)), "Set1")
-  if (n_clusters > length(cluster_colors)) {
-    cluster_colors <- colorRampPalette(cluster_colors)(n_clusters)
-  }
-  
-  # Criar gráfico ggplot
-  p <- ggplot(df_normalized, aes(x = Frame, y = Normalized, color = Cluster, group = Cluster)) +
-    geom_line(size = 1.2, alpha = 0.8) +
-    geom_point(size = 1.5, alpha = 0.7) +
-    scale_color_manual(values = cluster_colors) +
+  p <- ggplot(df_norm, aes(x = PC1_value, y = Normalized, color = Cluster)) +
+    # Usando smooth para curvas mais suaves (como sugerido anteriormente)
+    geom_smooth(se = FALSE, size = 2.5, span = 0.2) + 
+    scale_color_manual(values = colors) +
     labs(
-      title = "Evolução Temporal Normalizada da Importância dos Clusters",
-      subtitle = "Valores normalizados por frame (soma = 100%) para comparação relativa",
-      x = "Valor do PC1 (Progressão Temporal)",
-      y = "Importância Relativa (%)",
+      title = "Normalized Relative Importance",
+      subtitle = "Dominance of specific programs across EMT stages (Normalized per frame)",
+      x = "PC1 Value (Pseudotime)",
+      y = "Relative Importance (%)",
       color = "Cluster"
     ) +
-    theme_minimal(base_size = 14) +
-    theme(
-      plot.title = element_text(face = "bold", hjust = 0.5, size = 16),
-      plot.subtitle = element_text(hjust = 0.5, size = 12),
-      legend.position = "right",
-      panel.grid.major = element_line(color = "grey90", size = 0.2),
-      panel.grid.minor = element_blank()
-    ) +
-    scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 20))
+    scale_y_continuous(limits = c(0, 100)) +
+    theme_big_font
   
   return(p)
 }
 
-# Função alternativa para normalização por cluster (diferente abordagem)
-criar_grafico_normalizado_por_cluster <- function(df) {
-  
-  # Verificar colunas disponíveis
-  available_cols <- colnames(df)
-  message("Criando gráfico normalizado por cluster - colunas: ", paste(available_cols, collapse = ", "))
-  
-  # Usar Importance_smooth_norm se disponível, caso contrário calcular
-  if ("Importance_smooth_norm" %in% available_cols) {
-    message("Usando Importance_smooth_norm pré-calculada")
-    df_plot <- df %>%
-      filter(!is.na(Importance_smooth_norm)) %>%
-      mutate(
-        Normalized = Importance_smooth_norm * 100,  # Converter para percentual
-        Frame = PC1_value,
-        Cluster = as.factor(Cluster)
-      )
-  } else {
-    message("Calculando normalização por cluster...")
-    df_plot <- df %>%
-      mutate(
-        Value = Importance_smooth,
-        Frame = PC1_value,
-        Cluster = as.factor(Cluster)
-      ) %>%
-      filter(!is.na(Value), !is.na(Frame)) %>%
-      group_by(Cluster) %>%
-      mutate(
-        Max_Value = max(Value, na.rm = TRUE),
-        Normalized = ifelse(Max_Value == 0, 0, 100 * Value / Max_Value)
-      ) %>%
-      ungroup()
-  }
-  
-  if (nrow(df_plot) == 0) {
-    stop("Nenhum dado válido para gráfico normalizado por cluster.")
-  }
-  
-  # Preparar paleta de cores
-  n_clusters <- length(unique(df_plot$Cluster))
-  cluster_colors <- brewer.pal(min(9, max(3, n_clusters)), "Set1")
-  if (n_clusters > length(cluster_colors)) {
-    cluster_colors <- colorRampPalette(cluster_colors)(n_clusters)
-  }
-  
-  p <- ggplot(df_plot, aes(x = Frame, y = Normalized, color = Cluster, group = Cluster)) +
-    geom_line(size = 1.2, alpha = 0.8) +
-    geom_point(size = 1.5, alpha = 0.6) +
-    scale_color_manual(values = cluster_colors) +
-    labs(
-      title = "Importância Relativa dos Clusters (Normalizada por Cluster)",
-      subtitle = "Cada cluster normalizado pelo seu próprio valor máximo (0-100%)",
-      x = "Valor do PC1 (Progressão Temporal)",
-      y = "Importância Relativa (%)",
-      color = "Cluster"
-    ) +
-    theme_minimal(base_size = 14) +
-    theme(
-      plot.title = element_text(face = "bold", hjust = 0.5),
-      plot.subtitle = element_text(hjust = 0.5),
-      legend.position = "right"
-    ) +
-    ylim(0, 100)
-  
-  return(p)
-}
+message("\n=== GENERATING NORMALIZED PLOT ===")
+norm_plot <- criar_grafico_normalizado(temporal_smoothed)
+ggsave(file.path(output_dir, "images", "importancia_normalizada_por_frame.png"),
+       norm_plot, width = 18, height = 10, dpi = 300)
 
-############################################
-### 7. EXECUÇÃO DOS GRÁFICOS ADICIONAIS ###
-############################################
-
-message("\n=== CRIAÇÃO DE GRÁFICOS ADICIONAIS ===")
-
-# Verificar estrutura do temporal_smoothed
-if (!exists("temporal_smoothed")) {
-  stop("O objeto 'temporal_smoothed' não foi encontrado.")
-}
-
-message("Estrutura do temporal_smoothed:")
-print(str(temporal_smoothed))
-message("\nPrimeiras linhas do temporal_smoothed:")
-print(head(temporal_smoothed))
-
-# Tentar diferentes abordagens de normalização
-tryCatch({
-  message("\nTentativa 1: Normalização por frame...")
-  normalized_plot_1 <- criar_grafico_normalizado(temporal_smoothed)
-  ggsave(file.path(output_dir, "images", "importancia_normalizada_por_frame.png"),
-         normalized_plot_1, width = 14, height = 8, dpi = 600)
-  message("✅ Gráfico normalizado por frame salvo")
-}, error = function(e) {
-  warning("Falha na normalização por frame: ", e$message)
-})
-
-tryCatch({
-  message("\nTentativa 2: Normalização por cluster...")
-  normalized_plot_2 <- criar_grafico_normalizado_por_cluster(temporal_smoothed)
-  ggsave(file.path(output_dir, "images", "importancia_normalizada_por_cluster.png"),
-         normalized_plot_2, width = 14, height = 8, dpi = 600)
-  message("✅ Gráfico normalizado por cluster salvo")
-}, error = function(e) {
-  warning("Falha na normalização por cluster: ", e$message)
-})
-
-# Criar heatmap temporal (função existente)
-tryCatch({
-  message("\nCriando heatmap temporal...")
-  heatmap_plot <- criar_heatmap_temporal(temporal_smoothed)
-  ggsave(file.path(output_dir, "images", "heatmap_temporal_clusters.png"),
-         heatmap_plot, width = 12, height = 8, dpi = 600)
-  message("✅ Heatmap temporal salvo")
-}, error = function(e) {
-  warning("Falha ao criar heatmap: ", e$message)
-})
-
-############################################
-### 8. GRÁFICO DE ÁREA STACKED ###
-############################################
-
-# Gráfico adicional: área stacked para ver contribuição percentual
+# ------------------------------------------------------------------------------
+# 8. STACKED AREA PLOT
+# ------------------------------------------------------------------------------
 criar_grafico_area_stacked <- function(df) {
-  
+  # Calculate Percentage for Area
   df_area <- df %>%
+    group_by(PC1_value) %>%
     mutate(
-      Value = Importance_smooth,
-      Frame = PC1_value,
-      Cluster = as.factor(Cluster)
-    ) %>%
-    filter(!is.na(Value), !is.na(Frame)) %>%
-    group_by(Frame) %>%
-    mutate(
-      Total_Per_Frame = sum(Value, na.rm = TRUE),
-      Percentual = ifelse(Total_Per_Frame == 0, 0, 100 * Value / Total_Per_Frame)
+      Total = sum(Importance_smooth, na.rm=TRUE),
+      Percent = ifelse(Total==0, 0, 100 * Importance_smooth / Total)
     ) %>%
     ungroup()
   
-  # Preparar paleta de cores
   n_clusters <- length(unique(df_area$Cluster))
-  cluster_colors <- brewer.pal(min(9, max(3, n_clusters)), "Set1")
-  if (n_clusters > length(cluster_colors)) {
-    cluster_colors <- colorRampPalette(cluster_colors)(n_clusters)
-  }
+  colors <- get_cluster_colors(n_clusters)
   
-  p_area <- ggplot(df_area, aes(x = Frame, y = Percentual, fill = Cluster)) +
-    geom_area(alpha = 0.8, color = "white", size = 0.2) +
-    scale_fill_manual(values = cluster_colors) +
+  p <- ggplot(df_area, aes(x = PC1_value, y = Percent, fill = Cluster)) +
+    geom_area(alpha = 0.85, color = "white", size = 0.5) +
+    scale_fill_manual(values = colors) +
     labs(
-      title = "Contribuição Percentual dos Clusters ao Longo do Tempo",
-      subtitle = "Área stacked mostrando a contribuição relativa de cada cluster",
-      x = "Valor do PC1 (Progressão Temporal)",
-      y = "Contribuição Percentual (%)",
+      title = "Dynamics of Functional Modules (Stacked)",
+      subtitle = "Relative contribution of each gene cluster along EMT trajectory",
+      x = "PC1 Value (Pseudotime)",
+      y = "Relative Contribution (%)",
       fill = "Cluster"
     ) +
-    theme_minimal(base_size = 14) +
-    theme(
-      plot.title = element_text(face = "bold", hjust = 0.5),
-      plot.subtitle = element_text(hjust = 0.5),
-      legend.position = "right"
-    ) +
-    ylim(0, 100)
+    scale_y_continuous(expand = c(0, 0), limits = c(0, 101)) + # Remove gaps nos eixos
+    scale_x_continuous(expand = c(0, 0)) +
+    theme_big_font
   
-  return(p_area)
+  return(p)
 }
 
-tryCatch({
-  message("\nCriando gráfico de área stacked...")
-  area_plot <- criar_grafico_area_stacked(temporal_smoothed)
-  ggsave(file.path(output_dir, "images", "area_stacked_clusters.png"),
-         area_plot, width = 14, height = 8, dpi = 600)
-  message("✅ Gráfico de área stacked salvo")
-}, error = function(e) {
-  warning("Falha ao criar gráfico de área: ", e$message)
-})
+message("\n=== GENERATING STACKED AREA PLOT ===")
+area_plot <- criar_grafico_area_stacked(temporal_smoothed)
+ggsave(file.path(output_dir, "images", "area_stacked_clusters.png"),
+       area_plot, width = 18, height = 10, dpi = 300)
 
-message("\n✅ Todos os gráficos adicionais processados")
+message("✅ All English/BigFont plots saved successfully.")
+
 
 ############################################
 ### 9. VERIFICAÇÃO E SALVAMENTO FINAL ###

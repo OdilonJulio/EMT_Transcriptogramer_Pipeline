@@ -191,6 +191,17 @@ both_scales_plot <- both_scales_plot + plot_layout(guides = "collect") & theme(l
 ggsave("images/pca_combined_plot_temporal_both_scales.pdf",
        both_scales_plot, width = 12, height = 12, dpi = 300)
 
+# Junta tudo em um único arquivo, com título geral e legenda única
+indep_scales_plot <- row_indep_scale + plot_annotation(
+  title = "Temporal PCA comparison"
+) & theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+# Recolhe as legendas e coloca embaixo
+indep_scales_plot <- indep_scales_plot + plot_layout(guides = "collect") & theme(legend.position = "bottom")
+
+ggsave("images/pca_combined_plot_temporal_indep_scales.pdf",
+       both_scales_plot, width = 12, height = 12, dpi = 300)
+
 # -----------------------------
 # 6b. Novo grid 2x5 (PC1×PC2..6, R0 na linha de cima, R30 na linha de baixo)
 # -----------------------------
@@ -250,6 +261,8 @@ grid_plot <- (
 # Salvar em PDF largo
 ggsave("images/pca_grid_PC1_vs_PC2to6.pdf",
        grid_plot, width = 20, height = 10, dpi = 300)
+
+
 
 
 
@@ -334,69 +347,321 @@ all_conditions_plot <- wrap_plots(final_plot_R0, final_plot_R30, ncol = 2) +
 
 ggsave("images/pca_variance_complete_analysis.pdf", all_conditions_plot, 
        width = 20, height = 12, dpi = 600)
-
 # -----------------------------
-# 8. Análise de Heterogeneidade do Dia 8 (Endpoint)
+# 8. Day 8 Heterogeneity Analysis (Endpoint) - BIG FONTS VERSION
 # -----------------------------
-# Objetivo: Mostrar que no Dia 8 nem todas as células alcançaram o estado Mesenquimal final (extremo PC1).
-# Estratégia: Plotar a trajetória completa em cinza (background) e sobrepor o Dia 8 em Vermelho.
 
 generate_day8_heterogeneity_plot <- function(pca_df, title) {
   
-  # Definir subconjuntos
+  # Define subsets
   day8_data <- subset(pca_df, Day == "TGFbeta1-8day-batch1")
   background_data <- subset(pca_df, Day != "TGFbeta1-8day-batch1")
   
-  # Cor específica do Dia 8 (conforme seu palette original)
   day8_color <- "#E41A1C" 
-  
-  # Calcular limites para manter consistência visual
   x_limits <- range(pca_df$PC1)
   y_limits <- range(pca_df$PC2)
   
   p <- ggplot() +
-    # 1. Background: Trajetória completa (dias 0-4) em cinza suave
+    # Background
     geom_point(data = background_data, aes(x = PC1, y = PC2), 
-               color = "grey85", size = 0.5, alpha = 0.4) +
+               color = "grey85", size = 1.0, alpha = 0.4) + # Aumentei levemente o ponto também (0.5 -> 1.0)
     
-    # 2. Foreground: Apenas Dia 8 em Vermelho
+    # Foreground (Day 8)
     geom_point(data = day8_data, aes(x = PC1, y = PC2), 
-               color = day8_color, size = 1.2, alpha = 0.8) +
+               color = day8_color, size = 2.5, alpha = 0.8) + # Aumentei o ponto (1.2 -> 2.5)
     
-    # 3. Adicionar Rug plot (franja) no eixo X para enfatizar a densidade ao longo da PC1
+    # Rug plot
     geom_rug(data = day8_data, aes(x = PC1), 
-             sides = "b", color = day8_color, alpha = 0.5, length = unit(0.2, "cm")) +
+             sides = "b", color = day8_color, alpha = 0.5, length = unit(0.3, "cm")) +
     
-    # Estilização
+    # Styling (BIG FONTS)
     labs(title = title,
-         subtitle = "Destaque: Células do Dia 8 (Vermelho) sobre a trajetória (Cinza)",
-         x = "PC1 (Pseudotempo / Estado EMT)", 
+         subtitle = "Highlight: Day 8 Cells (Red) over trajectory (Grey)",
+         x = "PC1 (Pseudotime / EMT State)", 
          y = "PC2") +
     coord_cartesian(xlim = x_limits, ylim = y_limits) +
-    theme_minimal(base_size = 12) +
+    
+    # --- AQUI ESTÁ A MUDANÇA CRÍTICA ---
+    theme_minimal(base_size = 24) + # Dobrei de 12 para 24
     theme(
-      plot.title = element_text(face = "bold", hjust = 0.5),
-      plot.subtitle = element_text(size = 10, hjust = 0.5, color = "grey40"),
+      plot.title = element_text(face = "bold", hjust = 0.5), # Herda o tamanho 24+
+      plot.subtitle = element_text(size = 20, hjust = 0.5, color = "grey40"), # Dobrei de 10 para 20
       panel.grid.minor = element_blank(),
-      panel.border = element_rect(fill = NA, color = "grey80")
+      panel.border = element_rect(fill = NA, color = "grey80", linewidth = 1) # Borda mais grossa
     )
   
   return(p)
 }
 
-# Gerar os plots para R0 e R30
-plot_day8_R0 <- generate_day8_heterogeneity_plot(pca_r0_df, "Heterogeneidade no Dia 8 (Condição R0)")
-plot_day8_R30 <- generate_day8_heterogeneity_plot(pca_r30_df, "Heterogeneidade no Dia 8 (Condição R30)")
+# Generate plots
+plot_day8_R0 <- generate_day8_heterogeneity_plot(pca_r0_df, "Heterogeneity at Day 8 (R0)")
+plot_day8_R30 <- generate_day8_heterogeneity_plot(pca_r30_df, "Heterogeneity at Day 8 (R30)")
 
-# Combinar lado a lado
+# Combine
 day8_combined_plot <- (plot_day8_R0 + plot_day8_R30) +
   plot_annotation(
-    title = "Persistência de Estados Híbridos no Endpoint (Dia 8)",
-    theme = theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
+    title = "Persistence of Hybrid States at Endpoint (Day 8)",
+    theme = theme(plot.title = element_text(size = 32, face = "bold", hjust = 0.5)) # Dobrei de 16 para 32
   )
 
-# Salvar com qualidade de artigo
+# Save (Aumentei a altura da imagem para caber a fonte grande)
 ggsave("images/day8_heterogeneity_analysis.pdf", 
-       day8_combined_plot, width = 14, height = 7, dpi = 300)
+       day8_combined_plot, width = 16, height = 9, dpi = 300)
 
-message("Gráfico de heterogeneidade do Dia 8 gerado com sucesso em images/day8_heterogeneity_analysis.pdf")
+message("Gráfico com FONTES GIGANTES salvo com sucesso.")
+
+# ==============================================================================
+# 9. FINAL GRID 2x3: PC1 vs PC2...PC6 (R30 Only) with Consistent Style & Scale
+# ==============================================================================
+
+library(cowplot) # Required for plot_grid and get_legend
+library(dplyr)
+library(ggplot2)
+
+# 1. Prepare Data with Explicit Temporal Order
+# ------------------------------------------------------------------------------
+# We use the 'temporal_order' vector already defined in section 6
+pca_r30_df_ordered <- pca_r30_df %>%
+  mutate(Day = factor(Day, levels = temporal_order)) %>%
+  arrange(Day)
+
+# Calculate Centroids with the same order
+centroids_ordered <- pca_r30_df_ordered %>%
+  group_by(Day) %>%
+  summarize(across(starts_with("PC"), mean), .groups = "drop")
+
+# --- NOVO: Definir Limites Globais para o Eixo Y (PC2 até PC6) ---
+# Isso garante que todos os gráficos tenham a mesma escala visual
+y_cols <- c("PC2", "PC3", "PC4", "PC5", "PC6")
+global_y_limits <- range(pca_r30_df_ordered[, y_cols])
+
+# Opcional: Adicionar uma pequena margem (5%) para os pontos não cortarem
+y_margin <- diff(global_y_limits) * 0.05
+global_y_limits[1] <- global_y_limits[1] - y_margin
+global_y_limits[2] <- global_y_limits[2] + y_margin
+
+# 2. Define Plotting Function
+# ------------------------------------------------------------------------------
+create_consistent_traj_plot <- function(y_pc_name, y_pc_idx, shared_ylim) {
+  
+  # Calculate Variance Percentage
+  var_x <- round(pca_result_R30$explained_variance[1] * 100, 1)
+  var_y <- round(pca_result_R30$explained_variance[y_pc_idx] * 100, 1)
+  
+  p <- ggplot(pca_r30_df_ordered, aes(x = PC1, y = .data[[y_pc_name]], color = Day)) +
+    # A. Cell Points
+    geom_point(size = 0.5, alpha = 0.8) +
+    
+    # B. Centroids
+    geom_point(data = centroids_ordered, aes(x = PC1, y = .data[[y_pc_name]]), 
+               size = 3, shape = 18, color = "black") + 
+    
+    # C. Trajectory Path (Arrow)
+    geom_path(data = centroids_ordered, aes(x = PC1, y = .data[[y_pc_name]], group = 1),
+              arrow = arrow(length = unit(0.3, "cm")),
+              color = "black", linewidth = 0.6) +
+    
+    # D. Styling
+    scale_color_manual(values = color_palette) +
+    
+    # --- AQUI ESTA A MUDANCA DE ESCALA ---
+    coord_cartesian(ylim = shared_ylim) + 
+    # -------------------------------------
+  
+  labs(x = paste0("PC1 (", var_x, "%)"), 
+       y = paste0(y_pc_name, " (", var_y, "%)")) +
+    theme_minimal(base_size = 12) +
+    theme(
+      legend.position = "none",
+      panel.border = element_rect(color = "grey80", fill = NA),
+      axis.title = element_text(face = "bold", size = 10)
+    )
+  
+  return(p)
+}
+
+# 3. Generate the 5 Plots (PC2 to PC6)
+# ------------------------------------------------------------------------------
+# Passamos 'global_y_limits' para a função
+plot_pc2 <- create_consistent_traj_plot("PC2", 2, global_y_limits)
+plot_pc3 <- create_consistent_traj_plot("PC3", 3, global_y_limits)
+plot_pc4 <- create_consistent_traj_plot("PC4", 4, global_y_limits)
+plot_pc5 <- create_consistent_traj_plot("PC5", 5, global_y_limits)
+plot_pc6 <- create_consistent_traj_plot("PC6", 6, global_y_limits)
+
+# 4. Extract Legend (From a dummy plot)
+# ------------------------------------------------------------------------------
+dummy_legend_plot <- ggplot(pca_r30_df_ordered, aes(x = PC1, y = PC2, color = Day)) +
+  geom_point(size = 4) + 
+  scale_color_manual(values = color_palette) +
+  labs(color = "Timepoint") +
+  theme_minimal() +
+  theme(legend.position = "bottom",
+        legend.title = element_text(face = "bold"),
+        legend.text = element_text(size = 9)) +
+  guides(color = guide_legend(ncol = 1))
+
+final_legend <- get_legend(dummy_legend_plot)
+
+# 5. Assemble Grid 2x3 (Layout has to be adjusted since we have 5 plots + legend)
+# ------------------------------------------------------------------------------
+# Layout sugerido:
+# [PC2] [PC3] [PC4]
+# [PC5] [PC6] [LEGEND]
+
+final_grid <- plot_grid(
+  plot_pc2, plot_pc3, plot_pc4,
+  plot_pc5, plot_pc6, final_legend,
+  ncol = 3, nrow = 2,
+  labels = c("A", "B", "C", "D", "E", ""),
+  label_size = 14
+)
+
+# Add Main Title
+final_figure_R30 <- plot_grid(
+  ggdraw() + draw_label("R30 Transcriptome Trajectory (Fixed Scale)", 
+                        fontface = 'bold', size = 16),
+  final_grid,
+  ncol = 1,
+  rel_heights = c(0.05, 1)
+)
+
+# 6. Save (Updated Filename)
+# ------------------------------------------------------------------------------
+ggsave("images/pca_grid_PC1_vs_PC2to6_R30.pdf", final_figure_R30, width = 16, height = 10, dpi = 300)
+
+message("Final consistent grid saved: images/pca_grid_PC1_vs_PC2to6_R30.pdf")
+
+
+
+
+# ==============================================================================
+# 10. R30 VARIANCE ANALYSIS (FOCUSED 35 PCs vs ALL PCs) - ARTICLE QUALITY
+# ==============================================================================
+
+library(ggplot2)
+library(patchwork)
+library(scales)
+
+# 1. Configuração de Tema com Fontes Aumentadas (Article Style)
+# ------------------------------------------------------------------------------
+theme_variance_article <- theme_minimal(base_size = 20) + 
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 26),
+    plot.subtitle = element_text(hjust = 0.5, size = 18, color = "grey40"),
+    axis.title = element_text(face = "bold", size = 20),
+    axis.text = element_text(size = 16, color = "black"),
+    legend.position = "top",
+    legend.text = element_text(size = 16),
+    legend.title = element_text(face = "bold", size = 18),
+    panel.border = element_rect(color = "grey60", fill = NA, size = 1),
+    panel.grid.minor = element_blank()
+  )
+
+# 2. Função Geradora Customizada (R30 Variance)
+# ------------------------------------------------------------------------------
+create_variance_plot_custom <- function(pca_res, n_limit, title_text, show_elbow = TRUE) {
+  
+  # Preparar dados
+  total_vars <- length(pca_res$explained_variance)
+  limit <- min(n_limit, total_vars)
+  
+  df <- data.frame(
+    PC = 1:limit,
+    Explained = pca_res$explained_variance[1:limit] * 100,
+    Cumulative = pca_res$cumulative_variance[1:limit] * 100
+  )
+  
+  # Identificar o "Elbow" (Cotovelo) matematicamente para anotação
+  # (Reutilizando a lógica do seu script ou calculando simples)
+  if (show_elbow) {
+    coords <- data.frame(x = 1:limit, y = df$Cumulative)
+    line_start <- coords[1, ]
+    line_end <- coords[limit, ]
+    distances <- sapply(1:limit, function(i) {
+      pt <- coords[i, ]
+      abs((line_end$y - line_start$y) * pt$x - (line_end$x - line_start$x) * pt$y + 
+            line_end$x * line_start$y - line_end$y * line_start$x) /
+        sqrt((line_end$y - line_start$y)^2 + (line_end$x - line_start$x)^2)
+    })
+    elbow_pc <- which.max(distances)
+    elbow_y <- df$Cumulative[elbow_pc]
+  }
+  
+  # Plot
+  p <- ggplot(df, aes(x = PC)) +
+    # Barra de Variância Explicada (Azul)
+    geom_bar(aes(y = Explained, fill = "Explained Variance"), 
+             stat = "identity", width = 0.8, alpha = 0.9) +
+    
+    # Linha de Variância Acumulada (Vermelha)
+    geom_line(aes(y = Cumulative, group = 1, color = "Cumulative Variance"), size = 1.5) +
+    geom_point(aes(y = Cumulative, color = "Cumulative Variance"), size = 3) +
+    
+    # Linhas de referência (80% e 90%)
+    geom_hline(yintercept = 80, linetype = "dashed", color = "gray50", size = 0.8) +
+    geom_hline(yintercept = 90, linetype = "dashed", color = "gray50", size = 0.8) +
+    
+    # Escalas e Cores (Mantendo o padrão do seu script)
+    scale_y_continuous(limits = c(0, 105), expand = c(0, 0)) +
+    scale_fill_manual(name = "", values = c("Explained Variance" = "#1f78b4")) +
+    scale_color_manual(name = "", values = c("Cumulative Variance" = "#e31a1c")) +
+    
+    # Labels
+    labs(
+      title = title_text,
+      x = "Principal Component (PC)",
+      y = "Variance (%)"
+    ) +
+    theme_variance_article
+  
+  # Adicionar anotação do Cotovelo se solicitado
+  if (show_elbow) {
+    p <- p + 
+      geom_vline(xintercept = elbow_pc, linetype = "dotdash", color = "darkgreen", size = 1) +
+      annotate("text", x = elbow_pc + (limit*0.05), y = 50, 
+               label = sprintf("Elbow:\nPC%d\n(%.1f%%)", elbow_pc, elbow_y), 
+               color = "darkgreen", size = 6, hjust = 0, fontface = "bold")
+  }
+  
+  return(p)
+}
+
+# 3. Gerar os dois gráficos para R30
+# ------------------------------------------------------------------------------
+
+# Gráfico da Esquerda: Zoom nas primeiras 35 PCs
+plot_zoom <- create_variance_plot_custom(
+  pca_result_R30, 
+  n_limit = 25, 
+  title_text = "R30: First 25 Components (Detail)", 
+  show_elbow = TRUE
+)
+
+# Gráfico da Direita: Todas as PCs (Visão Global)
+plot_all <- create_variance_plot_custom(
+  pca_result_R30, 
+  n_limit = length(pca_result_R30$explained_variance), 
+  title_text = "R30: Global Spectrum (All PCs)", 
+  show_elbow = FALSE # Elbow faz menos sentido visualmente no full spectrum
+)
+
+# 4. Combinar e Salvar
+# ------------------------------------------------------------------------------
+# Combinar lado a lado com patchwork
+combined_r30_variance <- (plot_zoom | plot_all) +
+  plot_layout(guides = "collect") & # Legenda única
+  theme(legend.position = "bottom")
+
+# Adicionar Título Principal
+final_r30_variance_fig <- combined_r30_variance +
+  plot_annotation(
+    title = "Structural Decomposition of Variance: R30 Condition",
+    theme = theme(plot.title = element_text(size = 30, face = "bold", hjust = 0.5))
+  )
+
+# Salvar em alta resolução
+ggsave("images/pca_variance_R30_focused_25PC.pdf", 
+       final_r30_variance_fig, width = 20, height = 10, dpi = 300)
+
+message("Gráfico de variância R30 (25 PCs vs All) salvo com sucesso: images/pca_variance_R30_focused_25PC.pdf")

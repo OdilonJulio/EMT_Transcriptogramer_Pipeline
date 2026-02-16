@@ -408,3 +408,65 @@ message(paste("-", output_file_r30))
 # Visualizar a tabela R30 no console
 print("Tabela R30 (Médias por Dia):")
 print(centroids_r30)
+
+
+
+# -------------------------------------------------------------------------
+# ETAPA EXTRA: Plot Estático PC2 a PC13 com Zoom no Eixo Y
+# Solicitado: Intervalo PC2-PC13, Y fixo em [-0.004, 0.004]
+# -------------------------------------------------------------------------
+
+message("Gerando plot extra: PC1 vs PC2..PC13 com Y limitado...")
+
+# 1. Gerar dados especificamente para PC2 até PC13
+# (Ignoramos o 'num_pcs' do topo para garantir que vá até o 13)
+target_pcs <- 2:13
+
+# Verifica se a matriz PCA tem colunas suficientes
+if (ncol(pc_matrix) < 13) {
+  stop("A matriz PCA (pc_matrix) tem menos de 13 colunas. Não é possível plotar até PC13.")
+}
+
+# Reutiliza a função 'generate_pc1_vs_pcn_data' já definida no script
+data_13_list <- lapply(target_pcs, function(n) {
+  generate_pc1_vs_pcn_data(n, num_intervals, overlap_prop, pc_matrix)
+})
+
+# Unir e filtrar (aplica o mesmo filtro de X do restante do script)
+df_13 <- bind_rows(data_13_list) %>%
+  filter(is.finite(PC1_mean)) %>%
+  filter(PC1_mean > x_min_limit)
+
+# Ajustar ordem dos fatores para o Facet não bagunçar (ex: PC10 vir antes de PC2)
+df_13$PCn_index <- factor(df_13$PCn_index, levels = paste0("PC", target_pcs))
+
+# 2. Criar o gráfico com as escalas solicitadas
+plot_extra <- ggplot(df_13, aes(x = PC1_mean, y = PCn_mean)) +
+  geom_line(color = "steelblue", linewidth = 0.8) +
+  # Linha tracejada no zero para referência
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey70", size = 0.3) +
+  facet_wrap(~PCn_index, ncol = 4) + # Grid 3x4 ou 4x3 fica bom
+  labs(
+    title = paste0("PC1 vs PC2 to PC13 - intervals: ", num_intervals),
+    x = "PC1 (mean per interval)",
+    y = "PCn (mean per interval)"
+  ) +
+  # Força os limites exatos solicitados
+  coord_cartesian(
+    xlim = c(x_min_limit, x_max_limit),
+    ylim = c(-0.004, 0.004)
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(size = 8),
+    axis.text.x = element_text(size = 6)
+  )
+
+# 3. Salvar
+ggsave("images/PC1_vs_PC2_to_PC13.png", 
+       plot_extra, 
+       width = 12, height = 8, dpi = 300)
+
+message("Imagem extra salva: images/PC1_vs_PC2_to_PC13.png")

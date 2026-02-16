@@ -300,3 +300,137 @@ if (shared_cell %in% colnames(t_matrix_R0@transcriptogramS2) &&
 } else {
   message("\nA célula ", shared_cell, " não está presente em ambos R0 e R30")
 }
+
+
+
+# ==============================================================================
+# UPDATED: RELATIVE ERROR PLOTS (ENGLISH & LEGEND FIX)
+# ==============================================================================
+
+# 1. Plot Function (Now with explicit Legend and English labels)
+create_relative_error_plot <- function(original, reconstructed, dataset_label, k_pc, y_lim = NULL, epsilon = 1e-5) {
+  
+  # Calculate Relative Error
+  diff <- reconstructed - original$Expression
+  denom <- original$Expression + epsilon
+  rel_error <- diff / denom
+  
+  df <- data.frame(
+    Position = original$Position,
+    RelativeError = rel_error
+  )
+  
+  # Dynamic Title in English
+  plot_title <- paste0(dataset_label, " - Reconstruction using ", k_pc, " Principal Components")
+  
+  p <- ggplot(df, aes(x = Position, y = RelativeError)) +
+    # Reference Line (y=0) - Mapped to aesthetic for Legend
+    geom_hline(aes(yintercept = 0, color = "Original Reference (Baseline)"), 
+               linewidth = 0.6, alpha = 0.8) +
+    
+    # Error Line - Mapped to aesthetic for Legend
+    geom_line(aes(color = "Reconstruction Relative Error"), 
+              linewidth = 0.4, alpha = 0.9) + 
+    
+    # Customizing Colors and Legend Names manually
+    scale_color_manual(name = "", 
+                       values = c("Original Reference (Baseline)" = "black", 
+                                  "Reconstruction Relative Error" = "#7570b3"),
+                       guide = guide_legend(override.aes = list(
+                         linetype = c("solid", "solid"),
+                         linewidth = c(0.8, 0.8)
+                       ))) +
+    
+    labs(title = plot_title, 
+         x = "Gene Position (Transcriptogram)", 
+         y = "Relative Error [(Rec - Orig) / Orig]") +
+    
+    theme_minimal(base_size = 10) +
+    theme(
+      plot.title = element_text(size = 9, face = "bold", hjust = 0.5),
+      axis.text = element_text(size = 6),
+      axis.title = element_text(size = 7),
+      legend.position = "bottom",         # Legend at the bottom
+      legend.text = element_text(size = 7),
+      legend.key.size = unit(0.4, "cm"),
+      panel.grid.major = element_line(linewidth = 0.1),
+      panel.grid.minor = element_blank()
+    )
+  
+  if (!is.null(y_lim)) {
+    p <- p + coord_cartesian(ylim = c(-y_lim, y_lim))
+  }
+  
+  return(p)
+}
+
+# 2. Wrapper Function (Updated to pass 'k' correctly)
+generate_relative_plots_for_cell <- function(cell_id, dataset_label, max_pcs = 6) {
+  
+  # Select Dataset
+  if (dataset_label == "R0") {
+    pca_res <- pca_result_R0
+    orig_mat <- prepare_original_matrix(t_matrix_R0)
+  } else {
+    pca_res <- pca_result_R30
+    orig_mat <- prepare_original_matrix(t_matrix_R30)
+  }
+  
+  # Check cell existence
+  if (!cell_id %in% rownames(orig_mat)) {
+    message("Cell not found: ", cell_id)
+    return(NULL)
+  }
+  
+  original_signal <- data.frame(
+    Position = t_matrix_R0@transcriptogramS2$Position, 
+    Expression = orig_mat[cell_id, ]
+  )
+  
+  # --- Step 1: Calculate limits ---
+  all_max_errors <- c()
+  for (k in 1:max_pcs) {
+    recon_signal <- reconstruct_cell_profile(pca_res, cell_id, k)
+    diff <- recon_signal - original_signal$Expression
+    denom <- original_signal$Expression + 1e-5
+    rel_err <- diff / denom
+    all_max_errors <- c(all_max_errors, max(abs(rel_err), na.rm = TRUE))
+  }
+  global_y_lim <- max(all_max_errors)
+  
+  # --- Step 2: Generate Plots ---
+  plot_list <- list()
+  for (k in 1:max_pcs) {
+    recon_signal <- reconstruct_cell_profile(pca_res, cell_id, k)
+    
+    # CALLING THE UPDATED PLOT FUNCTION
+    p <- create_relative_error_plot(
+      original = original_signal,
+      reconstructed = recon_signal,
+      dataset_label = dataset_label,
+      k_pc = k,  # Passing the specific number
+      y_lim = global_y_lim,
+      epsilon = 1e-5
+    )
+    plot_list[[k]] <- p
+  }
+  
+  # --- Step 3: Save Grid ---
+  clean_name <- gsub("[^A-Za-z0-9]", "_", cell_id)
+  filename <- paste0("images/", dataset_label, "_", clean_name, "_1_6PCs_RELATIVE.png")
+  
+  combined_plot <- gridExtra::grid.arrange(grobs = plot_list, ncol = 2, 
+                                           top = paste0("Relative Reconstruction Error Analysis: ", cell_id))
+  
+  ggsave(filename, combined_plot, width = 10, height = 12, dpi = 300)
+  message("Saved English Relative Plot: ", filename)
+}
+
+# 3. Execution (Same logic as before)
+if (exists("cells_R0")) {
+  for (cell in cells_R0) generate_relative_plots_for_cell(cell, "R0")
+}
+
+if (exists("cells_R30")) {
+  for (cell in cells_R30) generate_relative_plots_for_cell(cell, "R30")
+}
