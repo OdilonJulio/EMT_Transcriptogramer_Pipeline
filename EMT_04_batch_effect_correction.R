@@ -176,3 +176,153 @@ full_plot <- (p_violin + p_mds) +
 # Save high-quality output
 ggsave("images/treatment_days_analysis.pdf", full_plot, 
        width = 14, height = 6, dpi = 300)
+
+
+
+
+
+##########################
+# ==============================================================================
+# BATCH EFFECT VALIDATION USING THE TRANSCTOGRAMER PACKAGE
+# ==============================================================================
+
+library(transcriptogramer)
+library(dplyr)
+library(biomaRt)
+library(vroom)
+library(ggplot2)
+library(patchwork)
+library(tidyr)
+library(Ropj)
+
+# 1. Load matrices BEFORE and AFTER correction
+# (Ensure both files are in the working directory)
+load("normalized_matrix.RData") # Raw Matrix (Before Batch Correction)
+load("copy_matrix.RData")       # Corrected Matrix (After Batch Correction)
+
+# 2. Isolate Day 0 columns (Control conditions)
+cols_batch1 <- grep("^notreated-batch1", colnames(normalized_matrix))
+cols_batch2 <- grep("^notreated-batch2", colnames(normalized_matrix))
+
+# 3. Calculate mean expression (To optimize Transcriptogramer processing)
+# Matrix BEFORE correction
+mat_before <- cbind(
+  Batch1 = rowMeans(normalized_matrix[, cols_batch1]),
+  Batch2 = rowMeans(normalized_matrix[, cols_batch2])
+)
+
+# Matrix AFTER correction
+mat_after <- cbind(
+  Batch1 = rowMeans(copy_matrix[, cols_batch1]),
+  Batch2 = rowMeans(copy_matrix[, cols_batch2])
+)
+
+# 4. ENSEMBL Mapping
+ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+
+dictionary <- getBM(attributes = c("ensembl_peptide_id", "ensembl_gene_id"), mart = ensembl) %>%
+  mutate(ensembl_peptide_id = ifelse(ensembl_peptide_id == "", NA, ensembl_peptide_id)) %>%
+  na.omit()
+
+gene_mapping <- getBM(attributes = c("external_gene_name", "ensembl_gene_id"),
+                      filters = "external_gene_name",
+                      values = rownames(mat_before), 
+                      mart = ensembl) %>%
+  mutate(ensembl_gene_id = ifelse(ensembl_gene_id == "", NA, ensembl_gene_id)) %>%
+  na.omit()
+
+mapped_genes <- gene_mapping$ensembl_gene_id[match(rownames(mat_before), gene_mapping$external_gene_name)]
+valid_indices <- !is.na(mapped_genes)
+
+# Filter and rename mean matrices with ENSEMBL IDs
+mat_before <- mat_before[valid_indices, , drop = FALSE]
+rownames(mat_before) <- mapped_genes[valid_indices]
+
+mat_after <- mat_after[valid_indices, , drop = FALSE]
+rownames(mat_after) <- mapped_genes[valid_indices]
+
+# 5. Load Ordering and Association matrix
+ord <- vroom("ordering_HomoSapiensScore800-2024-C.txt")
+assoc <- read.opj("Associationmatrix.opj")
+assoc <- assoc$associationMa
+
+assoc <- inner_join(assoc, ord, by = c("A" = "dim1")) %>% 
+  dplyr::rename(protein1 = Protein) %>% 
+  dplyr::inner_join(ord, by = c("B" = "dim1")) %>% 
+  dplyr::rename(protein2 = Protein) %>% 
+  dplyr::select(protein1, protein2)
+
+# ==============================================================================
+# 6. TRANSCRIPTOGRAMER PROCESSING (Radius = 30)
+# ==============================================================================
+
+# Object BEFORE Batch Correction
+t_before <- transcriptogramPreprocess(association = assoc, ordering = ord$Protein, radius = 30)
+t_before <- transcriptogramStep1(object = t_before, expression = mat_before, dictionary = dictionary)
+t_before <- transcriptogramStep2(object = t_before)
+
+# Object AFTER Batch Correction
+t_after <- transcriptogramPreprocess(association = assoc, ordering = ord$Protein, radius = 30)
+t_after <- transcriptogramStep1(object = t_after, expression = mat_after, dictionary = dictionary)
+t_after <- transcriptogramStep2(object = t_after)
+
+# ==============================================================================
+# 7. VISUALIZATION WITH GGPLOT2 AND PATCHWORK
+# ==============================================================================
+
+# Extract smoothed data (Step 2)
+df_before <- as.data.frame(t_before@transcriptogramS2)
+df_after  <- as.data.frame(t_after@transcriptogramS2)
+
+# Format to Tidy Data (Long format) forcing dplyr usage
+df_before_long <- df_before %>%
+  dplyr::select(Position, Batch1, Batch2) %>%
+  pivot_longer(cols = c(Batch1, Batch2), names_to = "Batch", values_to = "Expression")
+
+df_after_long <- df_after %>%
+  dplyr::select(Position, Batch1, Batch2) %>%
+  pivot_longer(cols = c(Batch1, Batch2), names_to = "Batch", values_to = "Expression")
+
+# Standardized colors
+color_b1 <- "#E41A1C" # Red
+color_b2 <- "#377EB8" # Blue
+
+# Plot 1: Before Correction
+p_before <- ggplot(df_before_long, aes(x = Position, y = Expression, color = Batch)) +
+  geom_line(alpha = 0.8, linewidth = 0.7) +
+  scale_color_manual(values = c("Batch1" = color_b1, "Batch2" = color_b2),
+                     labels = c("Batch1" = "Batch 1", "Batch2" = "Batch 2")) +
+  labs(title = "A. Before Batch Correction",
+       subtitle = "Evident basal shift (Batch Effect)",
+       x = "Protein Position in the Network",
+       y = "Smoothed Expression (R30)") +
+  theme_classic(base_size = 14) +
+  theme(legend.position = "none",
+        plot.title = element_text(face = "bold"),
+        axis.text = element_text(color = "black"))
+
+# Plot 2: After Correction
+p_after <- ggplot(df_after_long, aes(x = Position, y = Expression, color = Batch)) +
+  geom_line(alpha = 0.8, linewidth = 0.7) +
+  scale_color_manual(values = c("Batch1" = color_b1, "Batch2" = color_b2),
+                     labels = c("Batch1" = "Batch 1", "Batch2" = "Batch 2")) +
+  labs(title = "B. After Batch Correction",
+       subtitle = "Perfect alignment of control conditions",
+       x = "Protein Position in the Network",
+       y = "") + 
+  theme_classic(base_size = 14) +
+  theme(plot.title = element_text(face = "bold"),
+        axis.text = element_text(color = "black"))
+
+# Combine and Save
+combined_transcriptograms <- p_before + p_after + 
+  plot_layout(guides = "collect") & 
+  theme(legend.position = "bottom",
+        legend.title = element_text(face = "bold"))
+
+# Create output directory if it doesn't exist and save
+if (!dir.exists("images")) dir.create("images")
+
+ggsave(filename = "images/batch_correction_transcriptograms_R30.pdf", 
+       plot = combined_transcriptograms, 
+       width = 12, height = 5, dpi = 300)

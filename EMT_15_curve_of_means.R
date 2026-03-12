@@ -410,63 +410,87 @@ print("Tabela R30 (Médias por Dia):")
 print(centroids_r30)
 
 
-
 # -------------------------------------------------------------------------
-# ETAPA EXTRA: Plot Estático PC2 a PC13 com Zoom no Eixo Y
-# Solicitado: Intervalo PC2-PC13, Y fixo em [-0.004, 0.004]
+# EXTRA STEP: Static Plot PC2 to PC13 (Framed Grid and Internal Labels)
 # -------------------------------------------------------------------------
+message("\nGenerating extra plot (publication quality): PC1 vs PC2..PC13...")
 
-message("Gerando plot extra: PC1 vs PC2..PC13 com Y limitado...")
-
-# 1. Gerar dados especificamente para PC2 até PC13
-# (Ignoramos o 'num_pcs' do topo para garantir que vá até o 13)
-target_pcs <- 2:13
-
-# Verifica se a matriz PCA tem colunas suficientes
-if (ncol(pc_matrix) < 13) {
-  stop("A matriz PCA (pc_matrix) tem menos de 13 colunas. Não é possível plotar até PC13.")
+# Install required package for internal labels if it doesn't exist
+if (!requireNamespace("ggpp", quietly = TRUE)) {
+  message("Installing 'ggpp' package for internal label positioning...")
+  install.packages("ggpp")
 }
+library(ggpp) # Load package to use geom_text_npc
 
-# Reutiliza a função 'generate_pc1_vs_pcn_data' já definida no script
+# 1. Generate and prepare data (PC2 through PC13)
+target_pcs <- 2:13
+if (ncol(pc_matrix) < 13) stop("The PCA matrix has fewer than 13 columns.")
+
 data_13_list <- lapply(target_pcs, function(n) {
   generate_pc1_vs_pcn_data(n, num_intervals, overlap_prop, pc_matrix)
 })
 
-# Unir e filtrar (aplica o mesmo filtro de X do restante do script)
 df_13 <- bind_rows(data_13_list) %>%
-  filter(is.finite(PC1_mean)) %>%
-  filter(PC1_mean > x_min_limit)
+  filter(is.finite(PC1_mean) & PC1_mean > x_min_limit)
 
-# Ajustar ordem dos fatores para o Facet não bagunçar (ex: PC10 vir antes de PC2)
+# Correct factor order for Facet grid
 df_13$PCn_index <- factor(df_13$PCn_index, levels = paste0("PC", target_pcs))
 
-# 2. Criar o gráfico com as escalas solicitadas
+# Auxiliary dataframe for internal labels
+# Creates one row per facet to position the "PCn" text
+df_labels <- data.frame(PCn_index = unique(df_13$PCn_index))
+
+# 2. Create the enhanced plot
 plot_extra <- ggplot(df_13, aes(x = PC1_mean, y = PCn_mean)) +
-  geom_line(color = "steelblue", linewidth = 0.8) +
-  # Linha tracejada no zero para referência
-  geom_hline(yintercept = 0, linetype = "dashed", color = "grey70", size = 0.3) +
-  facet_wrap(~PCn_index, ncol = 4) + # Grid 3x4 ou 4x3 fica bom
+  # Main trajectory line
+  geom_line(color = "#1F77B4", linewidth = 1) +
+  # Zero reference line
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50", linewidth = 0.4) +
+  
+  # Internal labels (PCn) in the top-left corner of each facet
+  # npcx=0.05, npcy=0.95 places text at 5% from left and 95% from top
+  geom_text_npc(data = df_labels, aes(npcx = 0.05, npcy = 0.95, label = PCn_index),
+                hjust = 0, vjust = 1, fontface = "bold", size = 5, color = "black") +
+  
+  # Facet grid (4 columns x 3 rows)
+  facet_wrap(~PCn_index, ncol = 4) +
+  
+  # Titles and axes
   labs(
-    title = paste0("PC1 vs PC2 to PC13 - intervals: ", num_intervals),
-    x = "PC1 (mean per interval)",
-    y = "PCn (mean per interval)"
+    title = "Mean Trajectory of Higher Principal Components (Sliding Window Smoothing)",
+    subtitle = paste0("Visual Confidence Interval: PC1 = [", x_min_limit, ", ", x_max_limit, "], Fixed Y-axis at \u00B10.004"),
+    x = "Progression Proxy (Mean PC1)",
+    y = "Component Amplitude (Mean PCn)"
   ) +
-  # Força os limites exatos solicitados
+  
+  # Force exact requested limits
   coord_cartesian(
     xlim = c(x_min_limit, x_max_limit),
     ylim = c(-0.004, 0.004)
   ) +
-  theme_minimal(base_size = 12) +
+  
+  # FRAMED THEME AND LARGER FONTS
+  theme_bw(base_size = 14) + # Uses theme_bw to create the solid border
   theme(
-    plot.title = element_text(face = "bold", hjust = 0.5),
-    panel.grid.minor = element_blank(),
-    axis.text.y = element_text(size = 8),
-    axis.text.x = element_text(size = 6)
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 16),
+    plot.subtitle = element_text(hjust = 0.5, size = 12, color = "grey30"),
+    
+    # Remove external facet strips (since labels are now inside)
+    strip.text = element_blank(), 
+    strip.background = element_blank(),
+    
+    # Solid black border around each panel
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
+    panel.grid.minor = element_blank(), # Clean background
+    
+    # Highly legible axes
+    axis.text = element_text(color = "black", size = 10),
+    axis.title = element_text(face = "bold", size = 12)
   )
 
-# 3. Salvar
+# 3. Save
 ggsave("images/PC1_vs_PC2_to_PC13.png", 
        plot_extra, 
-       width = 12, height = 8, dpi = 300)
+       width = 14, height = 9, dpi = 300)
 
-message("Imagem extra salva: images/PC1_vs_PC2_to_PC13.png")
+message("Enhanced publication-quality image saved: images/PC1_vs_PC2_to_PC13.png")

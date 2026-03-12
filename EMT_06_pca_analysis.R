@@ -410,130 +410,93 @@ ggsave("images/day8_heterogeneity_analysis.pdf",
 
 message("Gráfico com FONTES GIGANTES salvo com sucesso.")
 
+
 # ==============================================================================
-# 9. FINAL GRID 2x3: PC1 vs PC2...PC6 (R30 Only) with Consistent Style & Scale
+# 9. FINAL GRID 1x5: PC1 vs PC2...PC6 (R30 Only) - ARTICLE QUALITY JPG
 # ==============================================================================
 
-library(cowplot) # Required for plot_grid and get_legend
 library(dplyr)
 library(ggplot2)
+library(patchwork) 
 
 # 1. Prepare Data with Explicit Temporal Order
-# ------------------------------------------------------------------------------
-# We use the 'temporal_order' vector already defined in section 6
 pca_r30_df_ordered <- pca_r30_df %>%
   mutate(Day = factor(Day, levels = temporal_order)) %>%
   arrange(Day)
 
-# Calculate Centroids with the same order
 centroids_ordered <- pca_r30_df_ordered %>%
   group_by(Day) %>%
   summarize(across(starts_with("PC"), mean), .groups = "drop")
 
-# --- NOVO: Definir Limites Globais para o Eixo Y (PC2 até PC6) ---
-# Isso garante que todos os gráficos tenham a mesma escala visual
+# Global limits for the Y-axis (PC2 to PC6) to ensure comparability
 y_cols <- c("PC2", "PC3", "PC4", "PC5", "PC6")
 global_y_limits <- range(pca_r30_df_ordered[, y_cols])
-
-# Opcional: Adicionar uma pequena margem (5%) para os pontos não cortarem
 y_margin <- diff(global_y_limits) * 0.05
 global_y_limits[1] <- global_y_limits[1] - y_margin
 global_y_limits[2] <- global_y_limits[2] + y_margin
 
 # 2. Define Plotting Function
-# ------------------------------------------------------------------------------
-create_consistent_traj_plot <- function(y_pc_name, y_pc_idx, shared_ylim) {
-  
-  # Calculate Variance Percentage
+create_consistent_traj_plot_1x5 <- function(y_pc_name, y_pc_idx, shared_ylim) {
   var_x <- round(pca_result_R30$explained_variance[1] * 100, 1)
   var_y <- round(pca_result_R30$explained_variance[y_pc_idx] * 100, 1)
   
   p <- ggplot(pca_r30_df_ordered, aes(x = PC1, y = .data[[y_pc_name]], color = Day)) +
-    # A. Cell Points
-    geom_point(size = 0.5, alpha = 0.8) +
     
-    # B. Centroids
+    # REDUCED POINT SIZE AND ALPHA FOR 13K+ CELLS
+    # Creates a transparent "cloud" rather than a solid block of color
+    geom_point(size = 0.6, alpha = 0.5) + 
+    
+    # Centroids and trajectory path (kept large and solid for visibility)
     geom_point(data = centroids_ordered, aes(x = PC1, y = .data[[y_pc_name]]), 
                size = 3, shape = 18, color = "black") + 
-    
-    # C. Trajectory Path (Arrow)
     geom_path(data = centroids_ordered, aes(x = PC1, y = .data[[y_pc_name]], group = 1),
-              arrow = arrow(length = unit(0.3, "cm")),
-              color = "black", linewidth = 0.6) +
+              arrow = arrow(length = unit(0.4, "cm")),
+              color = "black", linewidth = 0.8) +
     
-    # D. Styling
     scale_color_manual(values = color_palette) +
-    
-    # --- AQUI ESTA A MUDANCA DE ESCALA ---
     coord_cartesian(ylim = shared_ylim) + 
-    # -------------------------------------
-  
-  labs(x = paste0("PC1 (", var_x, "%)"), 
-       y = paste0(y_pc_name, " (", var_y, "%)")) +
-    theme_minimal(base_size = 12) +
+    
+    labs(x = paste0("PC1 (", var_x, "%)"), 
+         y = paste0(y_pc_name, " (", var_y, "%)")) +
+    theme_minimal(base_size = 20) +
     theme(
-      legend.position = "none",
-      panel.border = element_rect(color = "grey80", fill = NA),
-      axis.title = element_text(face = "bold", size = 10)
+      panel.border = element_rect(color = "grey60", fill = NA, linewidth = 1),
+      axis.title = element_text(face = "bold", size = 22),
+      axis.text = element_text(size = 16, color = "black"),
+      panel.grid.minor = element_blank()
     )
   
   return(p)
 }
 
-# 3. Generate the 5 Plots (PC2 to PC6)
-# ------------------------------------------------------------------------------
-# Passamos 'global_y_limits' para a função
-plot_pc2 <- create_consistent_traj_plot("PC2", 2, global_y_limits)
-plot_pc3 <- create_consistent_traj_plot("PC3", 3, global_y_limits)
-plot_pc4 <- create_consistent_traj_plot("PC4", 4, global_y_limits)
-plot_pc5 <- create_consistent_traj_plot("PC5", 5, global_y_limits)
-plot_pc6 <- create_consistent_traj_plot("PC6", 6, global_y_limits)
+# 3. Generate the 5 Plots
+plot_pc2 <- create_consistent_traj_plot_1x5("PC2", 2, global_y_limits)
+plot_pc3 <- create_consistent_traj_plot_1x5("PC3", 3, global_y_limits)
+plot_pc4 <- create_consistent_traj_plot_1x5("PC4", 4, global_y_limits)
+plot_pc5 <- create_consistent_traj_plot_1x5("PC5", 5, global_y_limits)
+plot_pc6 <- create_consistent_traj_plot_1x5("PC6", 6, global_y_limits)
 
-# 4. Extract Legend (From a dummy plot)
-# ------------------------------------------------------------------------------
-dummy_legend_plot <- ggplot(pca_r30_df_ordered, aes(x = PC1, y = PC2, color = Day)) +
-  geom_point(size = 4) + 
-  scale_color_manual(values = color_palette) +
-  labs(color = "Timepoint") +
-  theme_minimal() +
-  theme(legend.position = "bottom",
-        legend.title = element_text(face = "bold"),
-        legend.text = element_text(size = 9)) +
-  guides(color = guide_legend(ncol = 1))
+# 4. Assemble Grid 1x5 using Patchwork
+final_1x5_grid <- (plot_pc2 | plot_pc3 | plot_pc4 | plot_pc5 | plot_pc6) +
+  plot_layout(guides = "collect") & 
+  theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.title = element_blank(), # Removes legend title to save space
+    legend.text = element_text(size = 22, face = "bold"),
+    legend.key.size = unit(1.5, "cm") 
+  ) &
+  # INCREASES LEGEND DOT SIZE AND OPACITY OVERRIDING THE GEOM_POINT SETTINGS
+  guides(color = guide_legend(override.aes = list(size = 10, alpha = 1)))
 
-final_legend <- get_legend(dummy_legend_plot)
+# 5. Save as Publication Quality JPG (Banner format)
+# Fixed the object name to final_1x5_grid
+ggsave("images/pca_grid_PC1_vs_PC2to6_R30.jpg", plot = final_1x5_grid, 
+       device = "jpeg", width = 30, height = 8, dpi = 600)
 
-# 5. Assemble Grid 2x3 (Layout has to be adjusted since we have 5 plots + legend)
-# ------------------------------------------------------------------------------
-# Layout sugerido:
-# [PC2] [PC3] [PC4]
-# [PC5] [PC6] [LEGEND]
+message("1x5 Grid JPG successfully saved: images/pca_grid_PC1_vs_PC2to6_R30.jpg")
 
-final_grid <- plot_grid(
-  plot_pc2, plot_pc3, plot_pc4,
-  plot_pc5, plot_pc6, final_legend,
-  ncol = 3, nrow = 2,
-  labels = c("A", "B", "C", "D", "E", ""),
-  label_size = 14
-)
-
-# Add Main Title
-final_figure_R30 <- plot_grid(
-  ggdraw() + draw_label("R30 Transcriptome Trajectory (Fixed Scale)", 
-                        fontface = 'bold', size = 16),
-  final_grid,
-  ncol = 1,
-  rel_heights = c(0.05, 1)
-)
-
-# 6. Save (Updated Filename)
-# ------------------------------------------------------------------------------
-ggsave("images/pca_grid_PC1_vs_PC2to6_R30.pdf", final_figure_R30, width = 16, height = 10, dpi = 300)
-
-message("Final consistent grid saved: images/pca_grid_PC1_vs_PC2to6_R30.pdf")
-
-
-
+# (Aqui entra a Seção 10 do seu script inalterada)
 
 # ==============================================================================
 # 10. R30 VARIANCE ANALYSIS (FOCUSED 35 PCs vs ALL PCs) - ARTICLE QUALITY
@@ -665,3 +628,98 @@ ggsave("images/pca_variance_R30_focused_25PC.pdf",
        final_r30_variance_fig, width = 20, height = 10, dpi = 300)
 
 message("Gráfico de variância R30 (25 PCs vs All) salvo com sucesso: images/pca_variance_R30_focused_25PC.pdf")
+
+# ==============================================================================
+# 11. TIME-COURSE ANIMATION (GIF) WITH GGANIMATE (ZOOMED)
+# ==============================================================================
+
+library(gganimate)
+library(gifski) 
+
+message("Generating Time-Course Animation (GIF)... This may take a few minutes.")
+
+# 1. PREPARE TRAJECTORY SEGMENTS
+centroids_segments <- centroids_ordered %>%
+  mutate(
+    xstart = PC1,
+    ystart = PC2,
+    xend = lead(PC1),
+    yend = lead(PC2),
+    Day = lead(Day) 
+  ) %>%
+  filter(!is.na(xend))
+
+# 2. BASE PLOT SETUP
+anim_plot <- ggplot(pca_r30_df_ordered, aes(x = PC1, y = PC2, color = Day)) +
+  
+  # A. Cells
+  geom_point(size = 0.8, alpha = 0.6) +
+  
+  # B. Centroids
+  geom_point(data = centroids_ordered, aes(x = PC1, y = PC2), 
+             size = 6, shape = 18, color = "black") + 
+  
+  # C. Progressive Trajectory Path
+  geom_segment(data = centroids_segments, 
+               aes(x = xstart, y = ystart, xend = xend, yend = yend), 
+               arrow = arrow(length = unit(0.5, "cm"), type = "closed"),
+               color = "black", linewidth = 1.2, inherit.aes = FALSE) +
+  
+  # D. Scales and Aesthetics
+  scale_color_manual(values = color_palette) +
+  
+  # --- O ZOOM APLICADO AQUI ---
+  # coord_cartesian corta visualmente a tela sem remover dados estatísticos
+  coord_cartesian(
+    xlim = c(-0.008, max(pca_r30_df_ordered$PC1, na.rm = TRUE)), 
+    ylim = c(-0.005, 0.01)
+  ) + 
+  
+  # LEGEND
+  guides(color = guide_legend(override.aes = list(size = 10, alpha = 1))) +
+  
+  # E. Dynamic Labels
+  labs(
+    title = "EMT Progression Sequence\nCurrent Stage: {closest_state}",
+    x = "PC1 (Progression Proxy)", 
+    y = "PC2 (Amplitude)"
+  ) +
+  theme_minimal(base_size = 20) +
+  theme(
+    legend.position = "right", 
+    legend.title = element_blank(),
+    legend.text = element_text(size = 14, face = "bold"),
+    plot.title = element_text(face = "bold", size = 26, hjust = 0.5),
+    axis.title = element_text(face = "bold", size = 20),
+    panel.border = element_rect(color = "grey50", fill = NA, linewidth = 1.5)
+  ) +
+  
+  # 3. GGANIMATE COMMANDS
+  transition_states(Day, 
+                    transition_length = 1, 
+                    state_length = 3,
+                    wrap = FALSE) + 
+  
+  shadow_mark(past = TRUE, future = FALSE, alpha = 0.4) 
+
+# 4. RENDER AND SAVE THE GIF
+total_days <- length(unique(pca_r30_df_ordered$Day))
+seconds_per_day <- 2
+fps <- 10
+
+anim_rendered <- animate(
+  anim_plot, 
+  # loop = TRUE faz o GIF reiniciar infinitamente
+  renderer = gifski_renderer(loop = TRUE), 
+  width = 1000, height = 700, res = 100, 
+  fps = fps, 
+  duration = total_days * seconds_per_day,
+  # end_pause é medido em frames. 3 segundos * 10 fps = 30 frames
+  end_pause = 30 
+)
+
+# Save the generated GIF
+dir.create("images", showWarnings = FALSE)
+anim_save("images/pca_trajectory_animation.gif", animation = anim_rendered)
+
+message("Animation successfully saved (Loop enabled with 3s pause): images/pca_trajectory_animation.gif")
